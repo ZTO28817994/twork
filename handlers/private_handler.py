@@ -13,9 +13,11 @@ from telethon.tl.types import (
 
 
 class PrivateMessageHandler:
-    def __init__(self, client: TelegramClient, fallback_chat_ids: List[int]):
+    def __init__(self, client: TelegramClient, fallback_chat_ids: List[int], fallback_photo_chat_ids: List[int]):
         self.client = client
         self.fallback_chat_ids = fallback_chat_ids
+        self.fallback_photo_chat_ids = fallback_photo_chat_ids
+
         self.forward_pattern = re.compile(r'\|_forward_\|\@(\d+)')
 
     async def fetch_recent_messages(self, dialog):
@@ -84,7 +86,11 @@ class PrivateMessageHandler:
                 if match:
                     target_chat_id = int(match.group(1))
                 elif self.fallback_chat_ids:
-                    target_chat_id = random.choice(self.fallback_chat_ids)
+                    if isinstance(media, (MessageMediaPhoto)):
+                        target_chat_id = random.choice(self.fallback_photo_chat_ids)
+                    else:
+                        target_chat_id = random.choice(self.fallback_chat_ids)
+
                     print(f"🌟 無轉發標記，媒體改轉發至 chat_id={target_chat_id}")
                 else:
                     print("⚠️ 無 chat_id 可用，跳過訊息")
