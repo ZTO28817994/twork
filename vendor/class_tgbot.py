@@ -1142,7 +1142,7 @@ class lybot:
 
                         async for message in client.iter_messages(entity, min_id=min_id, limit=500, reverse=True):
                             # 如果 message.id 可以被 257 整除
-                            if message.id % 257 == 0:
+                            if message.id % 3257 == 0:
                                 nonsense_word = Nonsense().generate_greeting()
                                 result_send=await client.send_message(entity.id, f"{nonsense_word}")
                                 # print(f"Message: {nonsense_word}", flush=True)
