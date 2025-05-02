@@ -109,7 +109,11 @@ class PrivateMessageHandler:
                         title = getattr(chat, "title", getattr(chat, "username", "未知"))
                     except Exception:
                         title = "（無法取得）"
-                    print(f"⚠️ 媒體轉發失敗 chat_id={target_chat_id}, chat_title={title}，來源使用者={source_user}：{e}", flush=True)
+                    msg = f"⚠️ 媒體轉發失敗 chat_id={target_chat_id}, chat_title={title}，來源使用者={source_user}：{e}"
+                    setting_chat_id=2030683460
+                    setting_thread_id=181070
+                    async with self.client.conversation(setting_chat_id) as conv:
+                        await conv.send_message(msg, reply_to=setting_thread_id)
 
             elif msg.text:
                  # 使用正则表达式进行匹配，忽略大小写

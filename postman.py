@@ -20,7 +20,8 @@ api_id = int(os.getenv('API_ID'))
 api_hash = os.getenv('API_HASH')
 session_name = f"{api_id}session_name"
 
-
+setting_chat_id=2030683460
+setting_thread_id=181070
 
 # Load forward targets from .env
 targets_raw = os.getenv('FORWARD_TARGETS', '')
@@ -83,29 +84,44 @@ async def run_with_timeout():
         )
     except asyncio.TimeoutError:
         print("\n⏰ 執行超過 20 分鐘，自動結束。")
+        await send_completion_message()
+
+
+
+async def send_completion_message():
+    try:
+        print(f"发送完成消息到 {setting_chat_id} 线程 {setting_thread_id}")
+        if setting_chat_id == 0 or setting_thread_id == 0:
+            print("未设置配置线程 ID，无法发送完成消息。")
+            return
+        async with client.conversation(setting_chat_id) as conv:
+            await conv.send_message('ok', reply_to=setting_thread_id)
+    except Exception as e:
+        print("未设置配置线程 ID，无法发送完成消息。")
+        pass
 
 async def main():
     await client.start()
     #  # 提取邀請碼（只要 '+' 之後的部分）
-    # invite_hash = "GTikStRM0Hc2YTU1"
+    invite_hash = "7-HhTojcPCYyMjk0"
     
     # # 加入群組
-    # await client(ImportChatInviteRequest(invite_hash))
-    # print("已成功加入群組")
+    await client(ImportChatInviteRequest(invite_hash))
+    print("已成功加入群組")
 
 
-    # 將目標電話號碼導入為聯絡人（記得替換成正確的電話號碼和名稱）
-    # phone = "+886982099133"
-    # first_name = "John"
-    # last_name = "Doe"
+#     # 將目標電話號碼導入為聯絡人（記得替換成正確的電話號碼和名稱）
+#     phone = "+886982099133"
+#     first_name = "John"
+#     last_name = "Doe"
     
-    # contacts = [InputPhoneContact(client_id=0, phone=phone, first_name=first_name, last_name=last_name)]
-    # result = await client(ImportContactsRequest(contacts))
+#     contacts = [InputPhoneContact(client_id=0, phone=phone, first_name=first_name, last_name=last_name)]
+#     result = await client(ImportContactsRequest(contacts))
     
-    # # 輸出返回結果，裡面包含新導入聯絡人的資訊
-    # print(result.stringify())
-
-    # print("✅ 聯絡人已成功新增")
+#     # # 輸出返回結果，裡面包含新導入聯絡人的資訊
+#     print(result.stringify())
+# # 
+#     print("✅ 聯絡人已成功新增")
 
 
     # user_id = 5486047924

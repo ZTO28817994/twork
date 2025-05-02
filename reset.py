@@ -6,7 +6,8 @@ import os
 # Check if running in a local development environment
 if not os.getenv('GITHUB_ACTIONS'):
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(dotenv_path='.25506053.env')
+    
 
 # Get values from environment variables
 api_id = os.getenv('API_ID')

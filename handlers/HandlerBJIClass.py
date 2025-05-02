@@ -70,7 +70,7 @@ class HandlerBJIClass:
                 print(f"Current: {now.strftime('%Y-%m-%d %H:%M:%S')}\r\n",flush=True)
                 
                 if (now - last_post_time).total_seconds() > 1800:
-                    self.change_firstname()
+                    await self.change_firstname()
                     # 取1~10的随机数，若小于4，则发送
                     
                     # 发送随机语录
