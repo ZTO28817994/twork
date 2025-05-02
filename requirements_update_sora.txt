@@ -1,0 +1,4 @@
+jieba>=0.42.1
+python-dotenv>=1.0.1
+peewee>=3.17.0
+pymysql>=1.1.0
