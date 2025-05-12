@@ -70,7 +70,7 @@ class HandlerBJIClass:
                 print(f"Current: {now.strftime('%Y-%m-%d %H:%M:%S')}\r\n",flush=True)
                 
                 if (now - last_post_time).total_seconds() > 1800:
-                    await self.change_firstname()
+                    # await self.change_firstname()
                     # 取1~10的随机数，若小于4，则发送
                     
                     # 发送随机语录
@@ -126,25 +126,25 @@ class HandlerBJIClass:
 
                                     # 感谢语列表（低调简短）
                     thank_you_messages = [
-                        "多谢老板照顾 🙏",
-                        "感谢好意～",
-                        "收到，谢啦",
+                        "多谢老板 🙏",
+                        "感谢老板～",
+                        "谢啦",
                         "谢谢老板",
-                        "小红包，大人情",
-                        "心领了，谢~",
+                        "红包!",
+                        "谢~",
                         "感恩不尽",
                         "谢谢老板",
                         "收下啦～",
-                        "感谢支持",
-                        "老板万岁 😎"
+                        "感谢老板",
+                        "蟹蟹 😎"
                     ]
 
                     # 随机选择感谢语
 
                     
                     random_number = random.randint(1, 10)
-                    if random_number < 7:
-                        await self.change_firstname()
+                    if random_number < 7 and count > 5:
+                        # await self.change_firstname()
                         # print(f"Sending thank you message to {random.choice(thank_you_messages)}",flush=True)
                         sent_hb_message = await self.client.send_message(self.entity.id, random.choice(thank_you_messages))
 
@@ -319,7 +319,7 @@ class HandlerBJIClass:
                 user_fullname = None
                 if "Posted by" in response.text:
                     parts = response.text.split("Posted by", 1)
-                    content1 = limit_visible_chars(parts[0].replace("__", "").strip(), 180)
+                    content1 = limit_visible_chars(parts[0].replace("__", "").strip(), 150)
                     after_posted_by = parts[1].strip().split("\n")[0]
                     match = re.search(r"\[__(.*?)__\]", after_posted_by)
                     if match:

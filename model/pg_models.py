@@ -55,3 +55,17 @@ class SoraMediaPg(PgBaseModel):
         table_name = 'sora_media'
         indexes = ((('content_id', 'source_bot_name'), True),)
    
+class FileExtension(PgBaseModel):
+    id = AutoField()
+    file_type = CharField()  # 如需限制范围可加 constraints
+    file_unique_id = CharField()
+    file_id = CharField()
+    bot = CharField()
+    user_id = CharField(null=True)
+    create_time = DateTimeField()
+
+    class Meta:
+        table_name = 'file_extension'
+        indexes = (
+            (('file_unique_id', 'bot'), True),  # UNIQUE 约束
+        )

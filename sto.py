@@ -23,11 +23,12 @@ from telethon.tl.functions.photos import DeletePhotosRequest
 from telethon.tl.types import InputPhoto
 from telethon.tl.functions.account import UpdateProfileRequest
 from telethon.tl.functions.account import UpdateUsernameRequest
+from telethon.errors import ChannelPrivateError
 
 # 加载环境变量
 if not os.getenv('GITHUB_ACTIONS'):
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(dotenv_path='.25254811.env')
 
 # 配置参数
 config = {
@@ -42,6 +43,8 @@ config = {
 # 初始化 Telegram 客户端
 client = TelegramClient(config['session_name'], config['api_id'], config['api_hash'])
 
+last_message_id = 0
+
 # 常量
 MAX_PROCESS_TIME = 20 * 60  # 最大运行时间 20 分钟
 
@@ -54,14 +57,14 @@ async def keep_db_alive():
         except Exception as e:
             print(f"数据库连接保持错误: {e}")
 
-async def send_completion_message():
+async def send_completion_message(last_message_id):
     try:
         print(f"发送完成消息到 {config['setting_chat_id']} 线程 {config['setting_thread_id']}")
         if config['setting_chat_id'] == 0 or config['setting_thread_id'] == 0:
             print("未设置配置线程 ID，无法发送完成消息。")
             return
         async with client.conversation(config['setting_chat_id']) as conv:
-            await conv.send_message('ok', reply_to=config['setting_thread_id'])
+            await conv.send_message(f'ok message_id = {last_message_id}', reply_to=config['setting_thread_id'])
     except Exception as e:
         print("未设置配置线程 ID，无法发送完成消息。")
         pass
@@ -86,13 +89,25 @@ async def get_max_source_message_id(source_chat_id):
         return None
 
 async def save_scrap_progress(entity_id, message_id):
-    record, _ = ScrapProgress.get_or_create(
+    record = ScrapProgress.get_or_none(
         chat_id=entity_id,
         api_id=config['api_id'],
     )
-    record.message_id = message_id
-    record.update_datetime = datetime.now()
-    record.save()
+
+    if record is None:
+        # 不存在时新增
+        ScrapProgress.create(
+            chat_id=entity_id,
+            api_id=config['api_id'],
+            message_id=message_id,
+            update_datetime=datetime.now()
+        )
+    elif message_id > record.message_id:
+        # 存在且 message_id 更大时才更新
+        record.message_id = message_id
+        record.update_datetime = datetime.now()
+        record.save()
+    return message_id
 
 async def process_user_message(client, entity, message):
     # print(f"[User] Message from  ({entity.id}): {message.text}", flush=True)
@@ -150,13 +165,26 @@ async def man_bot_loop(client):
                 current_message = None
                 max_message_id = await get_max_source_message_id(entity.id)
                 min_id = max_message_id if max_message_id else 1
-                async for message in client.iter_messages(
-                    entity, min_id=min_id, limit=300, reverse=True, filter=InputMessagesFilterEmpty()
-                ):
-                    current_message = message
-                    await process_group_message(client, entity, message)
+
+                try:
+                    async for message in client.iter_messages(
+                        entity, min_id=min_id, limit=300, reverse=True, filter=InputMessagesFilterEmpty()
+                    ):
+                        
+                        if message.sticker:
+                            continue
+                        current_message = message
+                        await process_group_message(client, entity, message)
+                except ChannelPrivateError as e:
+                    print(f"目标 entity: {entity} 类型：{type(entity)}")
+                    print(f"❌ 无法访问频道：{e}")
+                except Exception as e:
+                    print(f"{e}", flush=True)
+                    print(f"{message}", flush=True)
+
                 if current_message:
-                    await save_scrap_progress(entity.id, current_message.id)
+                    last_message_id = await save_scrap_progress(entity.id, current_message.id)
+                    return last_message_id
 
 async def join(invite_hash):
     from telethon.tl.functions.messages import ImportChatInviteRequest
@@ -231,12 +259,12 @@ async def main():
     print(f"Current: {now.strftime('%Y-%m-%d %H:%M:%S')}",flush=True)
 
     while (time.time() - start_time) < MAX_PROCESS_TIME:
-        await man_bot_loop(client)
+        last_message_id = await man_bot_loop(client)
         await keep_db_alive()
         # print("--- Cycle End ---")
         await asyncio.sleep(random.randint(4, 6))
 
-    await send_completion_message()
+    await send_completion_message(last_message_id)
 
 if __name__ == "__main__":
     with client:
