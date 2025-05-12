@@ -230,9 +230,9 @@ async def remove_username(client):
 async def safe_delete_message(message):
     try:
         await client.delete_messages(message.chat_id, [message.id], revoke=True)
-        print(f"🧹 成功刪除訊息 {message.id}（雙方）", flush=True)
+        print(f"🧹 成功刪除訊息B {message.id}（雙方）", flush=True)
     except Exception as e:
-        print(f"⚠️ 刪除訊息失敗 {message.id}：{e}", flush=True)
+        print(f"⚠️ 刪除訊息失敗B {message.id}：{e}", flush=True)
 
 
 async def main():

@@ -16,6 +16,7 @@ class HandlerRelayClass:
         self.extra_data = extra_data
         self.forward_pattern = re.compile(r'\|_forward_\|\@(-?\d+|[a-zA-Z0-9_]+)')
         self.accept_duplicate = False
+        self._fallback_chat_ids_cache = None  # ✅ 实例缓存
 
 
     def parse_caption_json(self,caption: str):
@@ -187,23 +188,31 @@ class HandlerRelayClass:
         # print(f"[User] Message from {entity_title} ({self.entity.id}): {self.message.text}")
        
 
+    
+
+
     def get_fallback_chat_ids(self):
+        if self._fallback_chat_ids_cache is not None:
+            return self._fallback_chat_ids_cache
+
         try:
-            # print(f"🔍 正在查找 FORWARD_TARGETS {self.extra_data['app_id']}", flush=True)
             record = ScrapConfig.get(
                 (ScrapConfig.api_id == self.extra_data['app_id']) &
                 (ScrapConfig.title == 'FORWARD_TARGETS')
             )
             raw = record.value or ''
-            return [int(x.strip()) for x in raw.split(',') if x.strip().isdigit()]
+            ids = [int(x.strip()) for x in raw.split(',') if x.strip().isdigit()]
+            self._fallback_chat_ids_cache = ids  # ✅ 缓存
+            return ids
         except DoesNotExist:
             print("⚠️ scrap_config 中找不到 FORWARD_TARGETS")
+            self._fallback_chat_ids_cache = []
             return []
 
     async def safe_delete_message(self):
         try:
             
-            print(f"🧹 成功刪除訊息 {self.message.id}（雙方）", flush=True)
+            print(f"🧹 成功刪除訊息D {self.message.id}（雙方）", flush=True)
             await self.client.delete_messages(self.message.chat_id, [self.message.id], revoke=True)
         except Exception as e:
-            print(f"⚠️ 刪除訊息失敗 {self.message.id}：{e}", flush=True)
+            print(f"⚠️ 刪除訊息失敗D {self.message.id}：{e}", flush=True)

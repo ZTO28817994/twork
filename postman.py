@@ -13,9 +13,11 @@ from telethon.tl.types import InputMessagesFilterEmpty
 from peewee import DoesNotExist
 
 from model.scrap_progress import ScrapProgress
+from model.scrap_config import ScrapConfig
 from database import db
 
 from handlers.HandlerBJIClass import HandlerBJIClass
+from handlers.HandlerBJILiteClass import HandlerBJILiteClass
 from handlers.HandlerNoAction import HandlerNoAction
 from handlers.HandlerRelayClass import HandlerRelayClass
 
@@ -32,7 +34,7 @@ from telethon.errors import ChannelPrivateError
 # 加载环境变量
 if not os.getenv('GITHUB_ACTIONS'):
     from dotenv import load_dotenv
-    load_dotenv(dotenv_path='.25254811.env')
+    load_dotenv(dotenv_path='.28817994.env')
 
 # 配置参数
 config = {
@@ -48,6 +50,9 @@ config = {
 local_scrap_progress = {}  # key = (chat_id, api_id), value = message_id
 
 last_message_id = 0
+
+# 黑名单缓存
+blacklist_entity_ids = set()
 
 # 初始化 Telegram 客户端
 client = TelegramClient(config['session_name'], config['api_id'], config['api_hash'])
@@ -102,15 +107,9 @@ async def update_username(client,username):
 async def safe_delete_message(message):
     try:
         await client.delete_messages(message.chat_id, [message.id], revoke=True)
-        print(f"🧹 成功刪除訊息 {message.id}（雙方）", flush=True)
+        print(f"🧹 成功刪除訊息A {message.id}（雙方）", flush=True)
     except Exception as e:
-        print(f"⚠️ 刪除訊息失敗 {message.id}：{e}", flush=True)
-
-
-
-
-
-
+        print(f"⚠️ 刪除訊息失敗A {message.id}：{e}", flush=True)
 
 async def keep_db_alive():
     if db.is_closed():
@@ -132,6 +131,33 @@ async def send_completion_message(last_message_id):
     except Exception as e:
         print("未设置配置线程 ID，无法发送完成消息。")
         pass
+
+async def is_blacklisted(entity_id):
+    global blacklist_entity_ids
+
+    # ✅ 先查缓存
+    if entity_id in blacklist_entity_ids:
+        return True
+
+    # ✅ 先尝试从 ScrapConfig 取黑名单
+    try:
+        record = ScrapConfig.get(
+            (ScrapConfig.api_id == config['api_id']) &
+            (ScrapConfig.title == 'BLACKLIST_IDS')
+        )
+        raw = record.value or ''
+        
+        ids = {int(x.strip()) for x in raw.split(',') if x.strip().isdigit()}
+        blacklist_entity_ids.update(ids)  # 缓存
+
+        return entity_id in blacklist_entity_ids
+    except DoesNotExist:
+        print("⚠️ scrap_config 中找不到 BLACKLIST_IDS")
+        return False
+    except Exception as e:
+        print(f"⚠️ 加载黑名单失败: {e}")
+        return False
+
 
 async def get_max_source_message_id(source_chat_id):
     key = (source_chat_id, config['api_id'])
@@ -188,7 +214,7 @@ async def save_scrap_progress(entity_id, message_id):
 
     local_scrap_progress[key] = message_id  # ✅ 同步更新缓存
 
-async def process_user_message(client, entity, message):
+async def process_user_message(entity, message):
 
     botname = None
     try:
@@ -223,10 +249,10 @@ async def process_user_message(client, entity, message):
         # handler = HandlerNoAction(client, entity, message, extra_data)
         handler.delete_after_process = True
         await handler.handle()
-        # print(f"[Group] Message from {entity_title} ({entity.id}): {message.text}")
+       
        
 
-async def process_group_message(client, entity, message):
+async def process_group_message(entity, message):
     
     extra_data = {'app_id': config['api_id']}
 
@@ -234,25 +260,50 @@ async def process_group_message(client, entity, message):
 
     # 实现：根据 entity.id 映射到不同处理类
     class_map = {
-        2210941198: HandlerBJIClass,   # 替换为真实 entity.id 和处理类
-        2054963513: HandlerRelayClass
+        # 2210941198: HandlerBJIClass,   # 替换为真实 entity.id 和处理类
+        2210941198: HandlerBJILiteClass,   # 替换为真实 entity.id 和处理类
+        2054963513: HandlerRelayClass,
+        2030683460: HandlerNoAction,        #Configuration
+       
     }
 
-    
+   
+
     
 
     handler_class = class_map.get(entity.id)
     if handler_class:
+
+        entity_title = getattr(entity, 'title', f"Unknown entity {entity.id}")
+        print(f"[Group-X] Message from {entity_title} ({entity.id}): {message.text}")
+
         handler = handler_class(client, entity, message, extra_data)
         handler.accept_duplicate = True
         await handler.handle()
+
+
     else:
         pass
 
-async def man_bot_loop(client):
+
+
+async def man_bot_loop():
     last_message_id = 0  # 提前定义，避免 UnboundLocalError
     async for dialog in client.iter_dialogs():
         entity = dialog.entity
+
+        # ✅ 跳过黑名单
+        if await is_blacklisted(entity.id):
+            print(f"🚫 已屏蔽 entity: {entity.id}，跳过处理")
+            continue
+
+        entity_title = getattr(entity, 'title', None)
+        if not entity_title:
+            first_name = getattr(entity, 'first_name', '') or ''
+            last_name = getattr(entity, 'last_name', '') or ''
+            entity_title = f"{first_name} {last_name}".strip() or "Unknown"
+
+        print(f"当前对话: {entity_title} ({entity.id})", flush=True)
 
         if dialog.unread_count >= 0:
             if dialog.is_user:
@@ -260,10 +311,11 @@ async def man_bot_loop(client):
                 max_message_id = await get_max_source_message_id(entity.id)
                 min_id = max_message_id if max_message_id else 1
                 async for message in client.iter_messages(
-                    entity, min_id=min_id, limit=1, reverse=True, filter=InputMessagesFilterEmpty()
+                    entity, min_id=min_id, limit=10, reverse=True, filter=InputMessagesFilterEmpty()
                 ):
                     current_message = message
-                    await process_user_message(client, entity, message)
+                    
+                    await process_user_message(entity, message)
 
                 if current_message:
                     await save_scrap_progress(entity.id, current_message.id)
@@ -280,13 +332,14 @@ async def man_bot_loop(client):
 
                 try:
                     async for message in client.iter_messages(
-                        entity, min_id=min_id, limit=100, reverse=True, filter=InputMessagesFilterEmpty()
+                        entity, min_id=min_id, limit=500, reverse=True, filter=InputMessagesFilterEmpty()
                     ):
                         
                         if message.sticker:
                             continue
                         current_message = message
-                        await process_group_message(client, entity, message)
+                        # print(f"当前消息ID(G): {current_message.id}")
+                        await process_group_message(entity, message)
                 except ChannelPrivateError as e:
                     print(f"目标 entity: {entity} 类型：{type(entity)}")
                     print(f"❌ 无法访问频道：{e}")
@@ -306,6 +359,8 @@ async def man_bot_loop(client):
 
 async def main():
     await client.start(config['phone_number'])
+    await keep_db_alive()
+       
     # await update_username(client,"usesrnddzzzame")
    
     # await join("Dya4zqIBXtIxMWZk") #6874-01 2017145941
@@ -333,18 +388,20 @@ async def main():
   
   
     # await join("xbY8S-04jnEzYWE0")   
-    # await join("7-HhTojcPCYyMjk0")    #Coniguration
-
+    # await join("N9BuZt3_rJU5NmZk")    #Coniguration
+    # exit()
     start_time = time.time()
     # 显示现在时间
     now = datetime.now()
     print(f"Current: {now.strftime('%Y-%m-%d %H:%M:%S')}",flush=True)
 
     while (time.time() - start_time) < MAX_PROCESS_TIME:
-        last_message_id = await man_bot_loop(client)
-        # await keep_db_alive()
-        # print("--- Cycle End ---")
-        await asyncio.sleep(random.randint(14, 30))
+        try:
+            last_message_id = await asyncio.wait_for(man_bot_loop(), timeout=300)  # 5分钟超时
+        except asyncio.TimeoutError:
+            print("⚠️ 任务超时，跳过本轮", flush=True)
+        # await asyncio.sleep(random.randint(5, 10))
+       
 
     await send_completion_message(last_message_id)
 

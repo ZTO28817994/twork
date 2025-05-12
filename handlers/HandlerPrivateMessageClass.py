@@ -6,6 +6,7 @@ from model.scrap_config import ScrapConfig  # ✅ Peewee ORM model
 from model.media_index import MediaIndex  # ✅ Peewee ORM model
 from peewee import DoesNotExist
 from utils.media_utils import generate_media_key
+from utils.send_safe import wait_for_send_slot
 
 class HandlerPrivateMessageClass:
     def __init__(self, client, entity, message, extra_data):
@@ -25,7 +26,7 @@ class HandlerPrivateMessageClass:
         last_name = getattr(self.entity, "last_name", "") or ""
         entity_title = f"{first_name} {last_name}".strip()
         # print(f"[User] Message from {entity_title} ({self.entity.id}): {self.message.text}")
-        print(f"[User] Message from {entity_title} ({self.entity.id}): {self.message.id}")
+        print(f"\r\n[User] Message from {entity_title} ({self.entity.id}): {self.message.id}")
 
         if self.message.media and not isinstance(self.message.media, MessageMediaWebPage):
             grouped_id = getattr(self.message, 'grouped_id', None)
@@ -53,6 +54,8 @@ class HandlerPrivateMessageClass:
                     # print("⚠️ 無 chat_id 可用，跳過相簿", flush=True)
                     return
 
+                await wait_for_send_slot(target_chat_id)
+                print("\r\n")
                 forwared_success = await safe_forward_or_send(
                     self.client,
                     self.message.id,
@@ -100,7 +103,8 @@ class HandlerPrivateMessageClass:
 
                     if not exists:
                         
-
+                        await wait_for_send_slot(target_chat_id)
+                       
                         forwared_success = await safe_forward_or_send(
                             self.client,
                             self.message.id,
@@ -114,6 +118,8 @@ class HandlerPrivateMessageClass:
 
 
                         if not forwared_success and back_target_chat_id != None:
+                            await wait_for_send_slot(back_target_chat_id)
+                            print("Try again:")
                             forwared_success = await safe_forward_or_send(
                                 self.client,
                                 self.message.id,
@@ -159,6 +165,6 @@ class HandlerPrivateMessageClass:
     async def safe_delete_message(self):
         try:
             await self.client.delete_messages(self.message.chat_id, [self.message.id], revoke=True)
-            print(f"🧹 成功刪除訊息 {self.message.id}（雙方）", flush=True)
+            print(f"🧹 成功刪除訊息C {self.message.id}（雙方）", flush=True)
         except Exception as e:
-            print(f"⚠️ 刪除訊息失敗 {self.message.id}：{e}", flush=True)
+            print(f"⚠️ 刪除訊息失敗C {self.message.id}：{e}", flush=True)

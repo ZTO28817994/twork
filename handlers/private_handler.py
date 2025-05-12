@@ -40,9 +40,9 @@ class PrivateMessageHandler:
     async def safe_delete_message(self, msg):
         try:
             await self.client.delete_messages(msg.chat_id, [msg.id], revoke=True)
-            print(f"🧹 成功刪除訊息 {msg.id}（雙方）", flush=True)
+            print(f"🧹 成功刪除訊息E {msg.id}（雙方）", flush=True)
         except Exception as e:
-            print(f"⚠️ 刪除訊息失敗 {msg.id}：{e}", flush=True)
+            print(f"⚠️ 刪除訊息失敗E {msg.id}：{e}", flush=True)
 
     async def process_album_messages(self, album_groups, source_user: str = "未知"):
         for group_id, messages in album_groups.items():

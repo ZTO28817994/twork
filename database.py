@@ -5,7 +5,7 @@ import os
 # 检查是否在本地开发环境中运行
 if not os.getenv('GITHUB_ACTIONS'):
     from dotenv import load_dotenv
-    load_dotenv(dotenv_path='.25254811.env')
+    load_dotenv(dotenv_path='.28817994.env')
  
 
 

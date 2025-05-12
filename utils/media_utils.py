@@ -8,6 +8,7 @@ import asyncio
 from datetime import datetime
 from telethon.tl.types import Message, MessageMediaPhoto, MessageMediaDocument
 from typing import Optional, Tuple
+from telethon.errors import FloodWaitError
 
 
 MAX_CAPTION_LENGTH = 1024
@@ -35,14 +36,27 @@ async def safe_forward_or_send(client, message_id, from_chat_id, to_chat_id, mat
         
         # caption_json = json.dumps(caption_json, ensure_ascii=False, indent=4)
 
+        try:
+            await client.send_file(
+                to_chat_id,
+                material,
+                disable_notification=False,
+                parse_mode='html',
+                caption=caption_json
+            )
+        except FloodWaitError as e:
+            print(f"⚠️ FloodWait: 暂停 {e.seconds} 秒")
+            await asyncio.sleep(e.seconds + 1)
+            await client.send_file(
+                to_chat_id,
+                material,
+                disable_notification=False,
+                parse_mode='html',
+                caption=caption_json
+            )
 
-        await client.send_file(
-            to_chat_id,
-            material,
-            disable_notification=False,
-            parse_mode='html',
-            caption=caption_json
-        )
+
+        
        
         # 暂停1秒
         await asyncio.sleep(1)
@@ -85,13 +99,27 @@ async def fetch_and_send(client, from_chat_id, message_id, to_chat_id, material,
 
             caption_json2 = json.dumps(parsed_json, ensure_ascii=False, indent=4)
 
-            await client.send_file(
-                to_chat_id,
-                new_material,
-                disable_notification=False,
-                parse_mode='html',
-                caption=caption_json2
-            )
+
+            try:
+                await client.send_file(
+                    to_chat_id,
+                    new_material,
+                    disable_notification=False,
+                    parse_mode='html',
+                    caption=caption_json2
+                )
+            except FloodWaitError as e:
+                print(f"⚠️ FloodWait: 暂停 {e.seconds} 秒")
+                await asyncio.sleep(e.seconds + 1)
+                await client.send_file(
+                    to_chat_id,
+                    new_material,
+                    disable_notification=False,
+                    parse_mode='html',
+                    caption=caption_json2
+                )
+
+            
             print("✅ 重新发送成功！")
         except Exception as e:
             print(f"❌ 无法解析 caption_json: {e}\n内容是: {caption_json}")
