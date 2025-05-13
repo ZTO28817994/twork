@@ -4,6 +4,13 @@
 import asyncio
 import time
 import os
+
+# 加载环境变量
+if not os.getenv('GITHUB_ACTIONS'):
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path='.29614663.env')
+
+
 import random
 import re
 from datetime import datetime
@@ -15,6 +22,8 @@ from peewee import DoesNotExist
 from model.scrap_progress import ScrapProgress
 from model.scrap_config import ScrapConfig
 from database import db
+
+
 
 from handlers.HandlerBJIClass import HandlerBJIClass
 from handlers.HandlerBJILiteClass import HandlerBJILiteClass
@@ -29,12 +38,13 @@ from telethon.tl.functions.photos import DeletePhotosRequest
 from telethon.tl.types import InputPhoto
 from telethon.tl.functions.account import UpdateProfileRequest
 from telethon.tl.functions.account import UpdateUsernameRequest
+from telethon.tl.functions.channels import InviteToChannelRequest, TogglePreHistoryHiddenRequest,LeaveChannelRequest
 from telethon.errors import ChannelPrivateError
 
-# 加载环境变量
-if not os.getenv('GITHUB_ACTIONS'):
-    from dotenv import load_dotenv
-    load_dotenv(dotenv_path='.28817994.env')
+
+
+
+
 
 # 配置参数
 config = {
@@ -45,6 +55,7 @@ config = {
     'setting_chat_id': int(os.getenv('SETTING_CHAT_ID', '0')),
     'setting_thread_id': int(os.getenv('SETTING_THREAD_ID', '0'))
 }
+
 
 # 在模块顶部初始化全局缓存
 local_scrap_progress = {}  # key = (chat_id, api_id), value = message_id
@@ -73,6 +84,22 @@ async def join(invite_hash):
         else:
             print(f"加入群组失败: {e}")
 
+async def leave_group(entity):
+    try:
+        await client(LeaveChannelRequest(channel=entity))
+        print(f'✅ 已退出群组/频道: {getattr(entity, "title", entity.id)}')
+    except Exception as e:
+        print(f'❌ 退出失败: {e}')
+
+async def open_chat_history(entity):
+    try:
+        result = await client(TogglePreHistoryHiddenRequest(
+            channel=entity,
+            enabled=False  # False = 允许新成员查看历史记录
+        ))
+        print(f'✅ 已开启历史记录可见: {result}')
+    except Exception as e:
+        print(f'❌ 操作失败: {e}')
 
 async def delete_my_profile_photos(client):
     photos = await client.get_profile_photos('me')
@@ -103,6 +130,32 @@ async def update_username(client,username):
         print("用户名已成功变更。")
     except Exception as e:
         print(f"变更失败：{e}")
+
+
+async def invite_bot(bot_username, entity):
+# 获取 Bot 实体
+    bot_entity = await client.get_entity(bot_username)
+    # 邀请 Bot 到超级群
+    try:
+        await client.send_message(bot_username, '/start')
+        await client.send_message(bot_username, 'Hello')
+        await client(InviteToChannelRequest(
+            channel=entity,
+            users=[bot_entity]
+        ))
+        print(f'已邀请 @{bot_username} 进入本群')
+
+        # 检查是否真的在群里
+        participants = await client.get_participants(entity)
+        if any(p.username and p.username.lower() == bot_username.lower() for p in participants):
+            print(f'✅ 确认 @{bot_username} 已经加入')
+        else:
+            print(f'⚠️ @{bot_username} 似乎没有加入，可能已被踢出或受限')
+
+    except Exception as e:
+        print(f'邀请失败: {e}')
+
+
 
 async def safe_delete_message(message):
     try:
@@ -189,7 +242,7 @@ async def get_max_source_message_id(source_chat_id):
         return None
     
 
-
+        
 async def save_scrap_progress(entity_id, message_id):
     key = (entity_id, config['api_id'])
     record = ScrapProgress.get_or_none(
@@ -217,17 +270,33 @@ async def save_scrap_progress(entity_id, message_id):
 async def process_user_message(entity, message):
 
     botname = None
-    try:
-        if message.text:
+
+    if message.text:
+        try:
             match = re.search(r'\|_kick_\|\s*(.*?)\s*(bot)', message.text, re.IGNORECASE)
             if match:
                 botname = match.group(1) + match.group(2)
                 await client.send_message(botname, "/start")
                 await client.send_message(botname, "[~bot~]")
-    except Exception as e:
-        print(f"Error kicking bot: {e} {botname}", flush=True)
 
-    extra_data = {'app_id': config['api_id']}
+        except Exception as e:
+                print(f"Error kicking bot: {e} {botname}", flush=True)
+
+        #  |_join_|QQCyh1N2sMU5ZGQ0
+
+        try:
+            inviteurl = None
+            match2 = re.search(r'\|_join_\|(.*)', message.text, re.IGNORECASE)
+            if match2:
+                inviteurl = match2.group(1) 
+                print(f"邀请链接: {inviteurl}")
+                await join(inviteurl)    #Coniguration
+                
+        except Exception as e:
+                print(f"Error livite: {e} {inviteurl}", flush=True)
+   
+
+    extra_data = {'app_id': config['api_id'],'config': config}
 
    
 
@@ -236,6 +305,7 @@ async def process_user_message(entity, message):
         777000: HandlerNoAction,   # 替换为真实 entity.id 和处理类
         7419440827: HandlerNoAction,    #萨莱
         8076535891: HandlerNoAction    #岩仔
+        
 
     }
 
@@ -256,14 +326,26 @@ async def process_group_message(entity, message):
     
     extra_data = {'app_id': config['api_id']}
 
-   
 
+    # 检测是否是 |_init_|
+    if message.text == '|_init_|':
+        await invite_bot('luzai01bot', entity)  # 替换为实际的 Bot 用户名
+        await invite_bot('has_no_access_bot', entity)  # 替换为实际的 Bot 用户名
+        await invite_bot('DeletedAcconutBot', entity)  # 替换为实际的 Bot 用户名
+        await invite_bot('freebsd66bot', entity)  # 替换为实际的 Bot 用户名
+        await safe_delete_message(message)
+        await open_chat_history(entity)
+        await client.send_message(entity.id, f"entity.id: {str(entity.id)}"  )
+        await leave_group(entity)
+
+        return
+            
     # 实现：根据 entity.id 映射到不同处理类
     class_map = {
         # 2210941198: HandlerBJIClass,   # 替换为真实 entity.id 和处理类
         2210941198: HandlerBJILiteClass,   # 替换为真实 entity.id 和处理类
         2054963513: HandlerRelayClass,
-        2030683460: HandlerNoAction,        #Configuration
+        # 2030683460: HandlerNoAction,        #Configuration
        
     }
 
@@ -360,36 +442,46 @@ async def man_bot_loop():
 async def main():
     await client.start(config['phone_number'])
     await keep_db_alive()
-       
-    # await update_username(client,"usesrnddzzzame")
-   
-    # await join("Dya4zqIBXtIxMWZk") #6874-01 2017145941
-    # await join("fTMvarjGSckxZmI8") #7258-02 2091886937 v
-    # await join("aLUZCCIiKhM5ZWNk") #7275-03 2063167161
-    # await join("cr_hRjB_dRtkODdk") #7287-04 2108982395
-    # await join("AeW96FZ9pmZTdk") #6376-05 1997235289
-    # await join("li2wwjC6vEc5Mzdk") #6659-06   2000730581
-    # await join("YfssBV1GmsgzMWQ0")  #7350-07 2145325974
-    # await join("AWkBJsoFUc81MWE1")  #5891-08 2062860209
-    # await join("_nPFKXIaMns1OTQ0")  #7338-09 2015918658
-    # await join("Y7KzLjhksH82ZmM8")  #06315-10 2116379337 @shunfeng807
-    # await join("5vQRdy9O4AxhZWQ8")  #06393-11 2064531407    @shunfeng807
+
+    me = await client.get_me()
+    print(f'你的用户名: {me.username}')
+    print(f'你的ID: {me.id}')
+    print(f'你的名字: {me.first_name} {me.last_name or ""}')
+    print(f'是否是Bot: {me.bot}')
+
+
+    # await delete_my_profile_photos(client)
+    # await update_username(client,"gunndd8kdhdj")
+    # exit()
+
+    # await join("Dya4zqIBXtIxMWZk") #6874-01 2017145941    - 22329346  / 20100034
+    # await join("fTMvarjGSckxZmI8") #7258-02 2091886937 ok
+    # await join("aLUZCCIiKhM5ZWNk") #7275-03 2063167161    -22329346   / 20100034
+    # await join("cr_hRjB_dRtkODdk") #7287-04 2108982395 - 20100034
+    # await join("AeW96FZ9pmZTdk") #6376-05 1997235289  - 22329346  / 20100034
+    # await join("li2wwjC6vEc5Mzdk") #6659-06   2000730581 - 22329346   / 20100034
+    # await join("YfssBV1GmsgzMWQ0")  #7350-07 2145325974 / 20100034
+    # await join("AWkBJsoFUc81MWE1")  #5891-08 2062860209 / 20100034
+    # await join("_nPFKXIaMns1OTQ0")  #7338-09 2015918658 / 20100034
+    # await join("3eDZvSPvkVgyNmY0")  #06315-10 2047726819 v ok shunfeng807
+    # await join("3eDZvSPvkVgyNmY0")  #06393-11 2003243227 v   @shunfeng807
     # await join("JP4ToOui4FcyMzM0")  #6463-12   1843229948
-    # await join("PsKjngKmHXtlNTM0")  #7246-13   2021739085
+    # await join("PsKjngKmHXtlNTM0")  #7246-13   2021739085 v
 
     # await join("fRCAnbinkG1hYjU0")  #封面备份群   2086579883
     # await join("6gAolpGeQq8wYmM0")  #封面图中转站 2054963513
 
 
-    
+    # |_join_|3eDZvSPvkVgyNmY0
+
     
     
     
   
   
     # await join("xbY8S-04jnEzYWE0")   
-    # await join("N9BuZt3_rJU5NmZk")    #Coniguration
-    # exit()
+    
+    
     start_time = time.time()
     # 显示现在时间
     now = datetime.now()
